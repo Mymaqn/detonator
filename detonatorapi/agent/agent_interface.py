@@ -136,17 +136,23 @@ def submit_file_to_agent(submission_id: int) -> bool:
     exec_result = agentApi.ExecFile(filename, file_content, drop_path, exec_arguments, execution_mode)
     if not exec_result:
         db_submission_add_log(thread_db, db_submission, f"Error: When executing file on DetonatorAgent: {exec_result.error_message}")
+        logger.info("Still gather Agent and Execution logs after failed execution")
+
         # our main task failed. grab the logs from agent to see whats up
         db_submission.agent_phase = "error"
-        logger.info("Gather Agent and Execution logs")
-        agent_logs = agentApi.GetAgentLogs()
-        process_output = agentApi.GetProcessOutput()
-        db_submission.process_output = process_output
-        db_submission.agent_logs = agent_logs
+        db_submission.process_output = agentApi.GetProcessOutput()
+        db_submission.agent_logs = agentApi.GetAgentLogs()
         db_submission.completed_at = datetime.utcnow()
         thread_db.commit()
-        agentApi.ReleaseLock()
         thread_db.close()
+
+        # also stop tracing on rededr
+        if rededrApi is not None:
+            rededrApi.StopTrace()
+
+        # release lock
+        agentApi.ReleaseLock()
+
         return False
     executionFeedback: ExecutionFeedback = exec_result.unwrap()
 
@@ -227,6 +233,8 @@ def submit_file_to_agent(submission_id: int) -> bool:
         rededr_logs = rededrApi.GetAgentLogs()
         if rededr_logs is None:
             db_submission_add_log(thread_db, db_submission, "Warning: could not get RedEdr Agent logs from Agent")
+    if rededrApi is not None:
+        rededrApi.StopTrace()
 
     # kill process
     if executionFeedback == ExecutionFeedback.OK:

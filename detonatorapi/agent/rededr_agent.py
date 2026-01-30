@@ -1,9 +1,7 @@
-from enum import Enum
 import requests
-from typing import List, Optional, Dict
-import json
 import logging
-import random
+from typing import List, Optional, Dict
+
 from .feedbackcontainer import FeedbackContainer
 
 logger = logging.getLogger(__name__)
@@ -15,6 +13,7 @@ class RedEdrAgentApi:
 
 
     def StartTrace(self, target_names: List[str]) -> FeedbackContainer[None]:
+        # Reset any existing trace (just in case - remove logs etc.)
         url = self.rededr_url + "/api/trace/reset"
         try:
             response = requests.post(url)
@@ -50,6 +49,22 @@ class RedEdrAgentApi:
             error_msg = f"StartTrace error: {e}"
             logger.warning(f"Agent: {error_msg}")
             return FeedbackContainer.error(error_msg)
+        
+
+    def StopTrace(self) -> bool:
+        url = self.rededr_url + "/api/trace/reset"
+        try:
+            response = requests.post(url)
+            if response.status_code == 200:
+                return True
+            else:
+                error_msg = f"Reset error: {response.status_code} {response.text}"
+                logger.warning(f"Agent: {error_msg}")
+                return False
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Reset error: {e}"
+            logger.warning(f"Agent: {error_msg}")
+            return False
 
 
     def GetEvents(self) -> Optional[str]:
